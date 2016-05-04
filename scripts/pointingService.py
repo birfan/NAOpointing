@@ -46,13 +46,13 @@ class PointingService(object):
         # "Bottom" if the robot is facing the bottom edge of the tablet, "Left" if the robot is facing the left side of the tablet,
         # "Right" if the robot is facing the right side of the tablet.
 #         self.robotOffsetFromFloor = 70.0/100 # Height of the table that the robot is on (in M)
-        self.frame = 1              # 0 is "FRAME_TORSO", 1 is "FRAME_WORLD", 2 is "FRAME_ROBOT"
+        self.frame = 2              # 0 is "FRAME_TORSO", 1 is "FRAME_WORLD", 2 is "FRAME_ROBOT"
         self.effector = "RArm"      # Could be "Arms", "LArm", "RArm"
         self.hand = "RHand"         # Could be "LHand" or "RHand" (set by the effector)
         self.useWholeBody = False   # Do not use whole body for looking at a target
-        self.initArmSpeed = 0.15
+        self.initArmSpeed = 0.3
         self.initHeadSpeed = 0.1
-        self.timeIncrement = 0.01 #10 ms
+        self.timeIncrement = 0.15
         
         self.coorX = 0.01
         self.coorY = 0.0
@@ -62,8 +62,7 @@ class PointingService(object):
 
     @qi.bind(returnType=qi.Void, paramsType=[qi.Int8])
     @stk.logging.log_exceptions
-    def set(self, level):
-        
+    def set(self, level):        
         "Set level"
         
         self.s.ALTextToSpeech.say("Hello" + str(level))
@@ -72,26 +71,31 @@ class PointingService(object):
     @qi.bind(returnType=qi.Int8, paramsType=[])
     def get(self):
         "Get level"
+        
         return self.level
 
     @qi.bind(returnType=qi.Void, paramsType=[])
     def reset(self):
         "Reset level to default value"
+        
         return self.set(0)
 
     @qi.bind(returnType=qi.Void, paramsType=[])
     def stop(self):
         "Stop the service."
+        
         self.logger.info("PointingService stopped by user request.")
         self.qiapp.stop()
 
     @qi.nobind
     def on_stop(self):
         "Cleanup (add yours if needed)"
+        
         self.logger.info("PointingService finished.")
     
     def StiffnessOn(self):
-    # We use the "Body" name to signify the collection of all joints
+        "Turn stiffness on for all joints"
+        
         self.pNames = "Body"
         self.pStiffnessLists = 1.0
         self.pTimeLists = 1.0
@@ -110,7 +114,6 @@ class PointingService(object):
     def StartAutonomousLife(self):
         "Stop autonomous life"
         
-#         import pdb;pdb.set_trace()
         self.s.ALMotion.setBreathConfig([["Bpm", 6], ["Amplitude", 0.9]])
         self.s.ALMotion.setBreathEnabled("Arms", True)
         self.s.ALMotion.setBreathEnabled("Legs", True)
@@ -120,29 +123,32 @@ class PointingService(object):
         self.s.ALBasicAwareness.setStimulusDetectionEnabled("Movement",True)
         self.s.ALBasicAwareness.setStimulusDetectionEnabled("People",True)
         self.s.ALBasicAwareness.setStimulusDetectionEnabled("Touch",False)
-        self.s.ALBasicAwareness.startAwareness()
+        self.s.ALAutonomousLife.setState("solitary")
     
     @qi.bind(returnType=qi.Void, paramsType=[])
     def StopAutonomousLife(self):
         "Stop autonomous life"
+
+        self.s.ALBasicAwareness.stopAwareness()
+        self.s.ALAutonomousLife.setState("disabled")
         
-        self.s.ALMotion.setBreathEnabled("Arms", False)
-        self.s.ALMotion.setBreathEnabled("Legs", False)
+    @qi.bind(returnType=qi.Void, paramsType=[])
+    def StopAwareness(self):
+        "Stop autonomous life"
+        
         self.s.ALBasicAwareness.stopAwareness()
         
     @qi.bind(returnType=qi.Void, paramsType=[])
-    def StopAutonomousArms(self):
+    def StartAwareness(self):
         "Stop autonomous life"
         
-        self.s.ALMotion.setBreathEnabled("Arms", False)
-        self.s.ALBasicAwareness.stopAwareness()
+        self.s.ALBasicAwareness.startAwareness()
         
     @qi.bind(returnType=qi.Void, paramsType=[])
     @stk.logging.log_exceptions
     def StartLife(self):
         "Start autonomous life"
         
-        self.StartMotion()
         self.StartAutonomousLife()
         
     @qi.bind(returnType=qi.Void, paramsType=[])
@@ -156,16 +162,22 @@ class PointingService(object):
     def PointAtArm(self, armAngles):
         
         self.armAngles = armAngles
+        self.timeNumLoop = int(round(self.sleepTime/ self.timeIncrement))
+
+        for x in range(0, self.timeNumLoop):
+            self.s.ALTracker.pointAt(self.effector, [self.coorX, self.coorY, self.coorZ], self.frame, self.speed)
+            time.sleep(self.timeIncrement)
+#         self.distBtwHandMidFinger = 0.012
+#         self.alfa = math.atan2(math.fabs(self.coorY), self.coorX)
+#         self.coorX -= math.sin(self.alfa)*self.distBtwHandMidFinger
+#         self.coorY -= math.cos(self.alfa)*self.distBtwHandMidFinger #if self.effector = "RArm"
+#          
+#         if self.effector == "LArm":
+#             self.coorY += math.cos(self.alfa)*self.distBtwHandMidFinger #if self.effector = "LArm"
+         
+#         print "coorX: %.2f\n" % self.coorX
+#         print "coorY: %.2f\n" % self.coorY
         
-#         for x in range(0, self.timeNumLoop):
-#             print(time.ctime())
-#             self.s.ALTracker.pointAt(self.effector, [self.coorX, self.coorY, self.coorZ], self.frame, self.speed)
-#             print(time.ctime())
-        self.s.ALTracker.pointAt(self.effector, [self.coorX, self.coorY, self.coorZ], self.frame, self.speed)
-#             time.sleep(self.timeIncrement)
-        time.sleep(self.sleepTime)
-#         print(time.ctime())
-#         self.s.ALMotion.closeHand(self.hand)
         self.s.ALMotion.setAngles(self.hand, 0.01, self.initArmSpeed)
         self.s.ALMotion.setAngles(self.effector, self.armAngles, self.initArmSpeed)
         
@@ -173,10 +185,10 @@ class PointingService(object):
     def LookAtHead(self, headAngles):
         
         self.headAngles = headAngles
-        self.sleepTime = self.sleepTime + 0.5
-        
-        self.s.ALTracker.lookAt([self.coorX, self.coorY, self.coorZ], self.frame, self.speed, self.useWholeBody)
-        time.sleep(self.sleepTime)
+        self.timeNumLoop = int(round((self.sleepTime)/ self.timeIncrement))
+        for x in range(0, self.timeNumLoop):
+            self.s.ALTracker.lookAt([self.coorX, self.coorY, self.coorZ], self.frame, self.speed, self.useWholeBody)
+            time.sleep(self.timeIncrement)
 
         self.s.ALMotion.setAngles("Head", self.headAngles, self.initHeadSpeed)
         
@@ -190,47 +202,34 @@ class PointingService(object):
         self.coorY = coorY     # Y coordinate of target wrt to FRAME_WORLD of robot
         self.coorZ = coorZ     # Z coordinate of target wrt to FRAME_WORLD of robot
         self.sleepTime = sleepTime       
-        self.timeNumLoop = int(round(self.sleepTime/ self.timeIncrement))
 
-        if self.coorY > 0.05: #5 cm
-            self.effector = "LArm"
-            self.hand = "LHand"            
-        elif self.coorY < -0.05:
+        if self.coorY > 0.0:
             self.effector = "RArm"
-            self.hand = "RHand"
-        #else use whichever arm it used last time
-
-#         self.StartMotion()
-        
-#         self.initAnglesNames= []
-#         self.initAnglesNames.append(self.effector)
-#         self.initAnglesNames.append("Head")
-#         self.initAngles = self.s.ALMotion.getAngles(self.initAnglesNames, self.useSensors)
-        
-#         self.StopAutonomousLife()       
-        self.StopAutonomousArms()
+            self.hand = "RHand"            
+        elif self.coorY < 0.0:
+            self.effector = "LArm"
+            self.hand = "LHand"
+        #else use whichever arm is used last time
+    
+        self.StopAwareness()
         self.useSensors = False
         self.headAngles = self.s.ALMotion.getAngles("Head", self.useSensors)
         self.armAngles = self.s.ALMotion.getAngles(self.effector, self.useSensors)
         
-#       self.s.ALMotion.openHand(self.hand)
         self.s.ALMotion.setAngles(self.hand, 1.0, self.initArmSpeed)
     
-        t1 = Thread(target=self.LookAtHead, args=(self.headAngles, ))
-        t2 = Thread(target=self.PointAtArm, args=(self.armAngles, ))
+        headThread = Thread(target=self.LookAtHead, args=(self.headAngles, ))
+        armThread = Thread(target=self.PointAtArm, args=(self.armAngles, ))
 
-#         thread.start_new_thread ( self.LookAtHead, (self.headAngles, ))
-        t1.start()
+        headThread.start()
         time.sleep(0.5)
-        t2.start()
-#         thread.start_new_thread ( self.PointAtArm, (self.armAngles, ))
+        armThread.start()
         
-#         self.s.ALMotion.setAngles(self.initAnglesNames, self.initAngles, self.initSpeed)
-        t1.join()
-        t2.join()
-#         time.sleep(2.0)    # Change this to the time necessary for both actions to be finished
+        headThread.join()
+        armThread.join()
+        time.sleep(2.0)    # Change this to the time necessary for both actions to be finished
 
-        self.StartAutonomousLife() 
+        self.StartAwareness() 
                 
     @qi.bind(returnType=qi.Void, paramsType=(qi.Float, qi.Float, qi.Float, qi.Float))
     @stk.logging.log_exceptions
@@ -244,7 +243,7 @@ class PointingService(object):
 
         self.gamma = math.radians(180) # robot is vertical (is facing) to the tablet (rotation angle about Xtablet)
          
-        # self.robotPosition == "Top":   
+        # The following are for self.robotPosition == "Top":   
         self.theta =  math.radians(90) # rotation angle about Ztablet
         self.xTrans = self.tabletWidth/2 - self.tabletY # xTranslation from Xtablet to origin of robot FRAME_WORLD for self.robotPosition == "Top"
         self.yTrans = self.tabletX - self.tabletLength/2 # yTranslation from Ytablet to origin of robot FRAME_WORLD for self.robotPosition == "Top"
