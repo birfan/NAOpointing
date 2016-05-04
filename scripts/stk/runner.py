@@ -73,7 +73,7 @@ def init(qi_url=None):
             raise RuntimeError("No robot, not running.")
     # In some environments sys.argv[0] has unicode, which qi rejects
     sys.argv[0] = str(sys.argv[0])
-    qiapp = qi.Application(url="tcp://192.168.1.116:9559")
+    qiapp = qi.Application(url="tcp://192.168.1.117:9559")
 #     qiapp = qi.Application()
     qiapp.start()
     return qiapp

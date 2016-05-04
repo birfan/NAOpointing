@@ -59,6 +59,7 @@ class PointingService(object):
         self.coorZ = self.tabletZ
         self.speed = 0.2
         self.sleepTime = 2.0
+        self.staySpeed = 1.0
 
     @qi.bind(returnType=qi.Void, paramsType=[qi.Int8])
     @stk.logging.log_exceptions
@@ -164,8 +165,10 @@ class PointingService(object):
         self.armAngles = armAngles
         self.timeNumLoop = int(round(self.sleepTime/ self.timeIncrement))
 
+        self.s.ALTracker.pointAt(self.effector, [self.coorX, self.coorY, self.coorZ], self.frame, self.speed)
+        
         for x in range(0, self.timeNumLoop):
-            self.s.ALTracker.pointAt(self.effector, [self.coorX, self.coorY, self.coorZ], self.frame, self.speed)
+            self.s.ALTracker.pointAt(self.effector, [self.coorX, self.coorY, self.coorZ], self.frame, self.staySpeed)
             time.sleep(self.timeIncrement)
 #         self.distBtwHandMidFinger = 0.012
 #         self.alfa = math.atan2(math.fabs(self.coorY), self.coorX)
@@ -186,8 +189,11 @@ class PointingService(object):
         
         self.headAngles = headAngles
         self.timeNumLoop = int(round((self.sleepTime)/ self.timeIncrement))
+        
+        self.s.ALTracker.lookAt([self.coorX, self.coorY, self.coorZ], self.frame, self.speed, self.useWholeBody)
+        
         for x in range(0, self.timeNumLoop):
-            self.s.ALTracker.lookAt([self.coorX, self.coorY, self.coorZ], self.frame, self.speed, self.useWholeBody)
+            self.s.ALTracker.lookAt([self.coorX, self.coorY, self.coorZ], self.frame, self.staySpeed, self.useWholeBody)
             time.sleep(self.timeIncrement)
 
         self.s.ALMotion.setAngles("Head", self.headAngles, self.initHeadSpeed)
@@ -201,7 +207,7 @@ class PointingService(object):
         self.coorX = coorX     # X coordinate of target wrt to FRAME_WORLD of robot
         self.coorY = coorY     # Y coordinate of target wrt to FRAME_WORLD of robot
         self.coorZ = coorZ     # Z coordinate of target wrt to FRAME_WORLD of robot
-        self.sleepTime = sleepTime       
+        self.sleepTime = 2*sleepTime/3      
 
         if self.coorY > 0.0:
             self.effector = "RArm"
