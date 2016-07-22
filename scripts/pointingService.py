@@ -1,12 +1,31 @@
+#!/usr/local/bin/python
 """
-A sample showing how to have a NAOqi service as a Python app.
+/*******************************************************************************
+*   Copyright 2016 Bahar Irfan                                                 *
+*                                                                              *
+*   This file is the pointing service for Nao for pointing at Chilitags or     *
+*   a world coordinate.                                                        *
+*                                                                              *
+*   Chilitags is free software: you can redistribute it and/or modify          *
+*   it under the terms of the Lesser GNU General Public License as             *
+*   published by the Free Software Foundation, either version 3 of the         *
+*   License, or (at your option) any later version.                            *
+*                                                                              *
+*   Chilitags is distributed in the hope that it will be useful,               *
+*   but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the              *
+*   GNU Lesser General Public License for more details.                        *
+*                                                                              *
+*   You should have received a copy of the GNU Lesser General Public License   *
+*   along with PointingService.  If not, see <http://www.gnu.org/licenses/>.   *
+*******************************************************************************/
 """
 
-__version__ = "0.0.3"
+__version__ = "0.0.1"
 
-__copyright__ = "Copyright 2015, Aldebaran Robotics"
-__author__ = 'ekroeger'
-__email__ = 'ekroeger@aldebaran.com'
+__copyright__ = "Copyright 2016, Bahar Irfan"
+__author__ = 'Bahar Irfan'
+__email__ = 'bahar.irfan@plymouth.ac.uk'
 
 
 import qi
@@ -18,12 +37,14 @@ import stk.logging
 
 import time
 import math
+
+import numpy as np
 # import thread
 
 from threading import Thread
 
 class PointingService(object):
-    "NAOqi service example (set/get on a simple value)."
+    "NAOqi service."
     APP_ID = "com.aldebaran.PointingService"
     def __init__(self, qiapp):
         # generic activity boilerplate
@@ -32,21 +53,13 @@ class PointingService(object):
         self.events = stk.events.EventHelper(qiapp.session) 
         self.s = stk.services.ServiceCache(qiapp.session) 
         self.logger = stk.logging.get_logger(qiapp.session, self.APP_ID)
-        # Internal variables
-        self.level = 0
-        #TODO: PUT THE FOLLOWING IN CONFIG FILE 
-        self.tabletX = 20.0/100         # X coordinate of the tablet center with respect to FRAME_WORLD (in M)
-        self.tabletY = 0.0/100          # Y coordinate of the tablet center with respect to FRAME_WORLD (in M)
-        self.tabletZ = 0.0/100          # Z coordinate of tablet with respect to FRAME_WORLD (in M)
-        self.tabletWidth = 29.21/100    # Width of tablet in M (Microsoft surface pro 4)
-        self.tabletLength = 20.142/100  # Length of tablet in M (Microsoft surface pro 4)
+        
+        self.tabletWidth = 29.21/100    # Width of tablet in M in X (Microsoft surface pro 4)
+        self.tabletLength = 20.142/100  # Length of tablet in M in Y (Microsoft surface pro 4)
         self.tabletResolutionX = 2736   # Tablet resolution in X
         self.tabletResolutionY = 1824   # Tablet resolution in Y
-        self.robotPosition = "Top"  # robotPosition relative to the tablet. "Top" if the robot is facing the top edge of the tablet
-        # "Bottom" if the robot is facing the bottom edge of the tablet, "Left" if the robot is facing the left side of the tablet,
-        # "Right" if the robot is facing the right side of the tablet.
-#         self.robotOffsetFromFloor = 70.0/100 # Height of the table that the robot is on (in M)
-        self.frame = 2              # 0 is "FRAME_TORSO", 1 is "FRAME_WORLD", 2 is "FRAME_ROBOT"
+        
+        self.frame = 0              # 0 is "FRAME_TORSO", 1 is "FRAME_WORLD", 2 is "FRAME_ROBOT"
         self.effector = "RArm"      # Could be "Arms", "LArm", "RArm"
         self.hand = "RHand"         # Could be "LHand" or "RHand" (set by the effector)
         self.useWholeBody = False   # Do not use whole body for looking at a target
@@ -56,36 +69,23 @@ class PointingService(object):
         
         self.coorX = 0.01
         self.coorY = 0.0
-        self.coorZ = self.tabletZ
+        self.coorZ = 0.0
         self.speed = 0.2
         self.sleepTime = 2.0
         self.staySpeed = 1.0
-
-    @qi.bind(returnType=qi.Void, paramsType=[qi.Int8])
-    @stk.logging.log_exceptions
-    def set(self, level):        
-        "Set level"
         
-        self.s.ALTextToSpeech.say("Hello" + str(level))
-        self.level = level
+        self.cameraName = "CameraBottom"
 
-    @qi.bind(returnType=qi.Int8, paramsType=[])
-    def get(self):
-        "Get level"
+        self.isLocalized = False
+        self.localizationTag = 8
+        self.fixedFrame = 0
         
-        return self.level
-
-    @qi.bind(returnType=qi.Void, paramsType=[])
-    def reset(self):
-        "Reset level to default value"
-        
-        return self.set(0)
-
     @qi.bind(returnType=qi.Void, paramsType=[])
     def stop(self):
         "Stop the service."
         
         self.logger.info("PointingService stopped by user request.")
+        self.unsubscribeCamera()
         self.qiapp.stop()
 
     @qi.nobind
@@ -94,25 +94,30 @@ class PointingService(object):
         
         self.logger.info("PointingService finished.")
     
-    def StiffnessOn(self):
+    def stiffnessOn(self):
         "Turn stiffness on for all joints"
         
         self.pNames = "Body"
         self.pStiffnessLists = 1.0
         self.pTimeLists = 1.0
         self.s.ALMotion.stiffnessInterpolation(self.pNames, self.pStiffnessLists, self.pTimeLists)
+        
+    def stiffnessOff(self):
+        "Turn stiffness off for all joints and go to crouch position"
+        
+        self.s.ALMotion.rest() #Crouch
     
     @qi.bind(returnType=qi.Void, paramsType=[])
     @stk.logging.log_exceptions
-    def StartMotion(self):
+    def startMotion(self):
         "Start initial motion"
         
-        self.StiffnessOn()
+        self.stiffnessOn()
         self.s.ALRobotPosture.goToPosture("StandInit", 0.5)
         self.s.ALMotion.wbEnable(False)      
         
     @qi.bind(returnType=qi.Void, paramsType=[])
-    def StartAutonomousLife(self):
+    def startAutonomousLife(self):
         "Stop autonomous life"
         
         self.s.ALMotion.setBreathConfig([["Bpm", 6], ["Amplitude", 0.9]])
@@ -127,40 +132,129 @@ class PointingService(object):
         self.s.ALAutonomousLife.setState("solitary")
     
     @qi.bind(returnType=qi.Void, paramsType=[])
-    def StopAutonomousLife(self):
+    def stopAutonomousLife(self):
         "Stop autonomous life"
 
         self.s.ALBasicAwareness.stopAwareness()
         self.s.ALAutonomousLife.setState("disabled")
         
     @qi.bind(returnType=qi.Void, paramsType=[])
-    def StopAwareness(self):
+    def stopAwareness(self):
         "Stop autonomous life"
         
         self.s.ALBasicAwareness.stopAwareness()
         
     @qi.bind(returnType=qi.Void, paramsType=[])
-    def StartAwareness(self):
+    def startAwareness(self):
         "Stop autonomous life"
         
         self.s.ALBasicAwareness.startAwareness()
         
     @qi.bind(returnType=qi.Void, paramsType=[])
     @stk.logging.log_exceptions
-    def StartLife(self):
+    def startLife(self):
         "Start autonomous life"
         
-        self.StartAutonomousLife()
+        self.startAutonomousLife()
         
     @qi.bind(returnType=qi.Void, paramsType=[])
-    def StopLife(self):
+    def stopLife(self):
         "Stop autonomous life"
         
-        self.StopAutonomousLife()
+        self.stopAutonomousLife()
         self.s.ALMotion.rest() #Crouch
+                 
+    @qi.bind(returnType=qi.Void, paramsType=[qi.Int16])
+    def subscribeCamera(self, camIndex):
+        "Subscribes the given camera (0 for top, 1 for bottom)"
+                
+        self.s.ChilitagsModule.setCameraResolution640x480() # comment this line to set the camera resolution to default (320x240)
+
+        self.s.ChilitagsModule.subscribeCameraLocal(camIndex)
+        
+        if camIndex == 0:
+            self.cameraName = "CameraTop"
+        else:
+            self.cameraName = "CameraBottom"
     
     @qi.bind(returnType=qi.Void, paramsType=[])
-    def PointAtArm(self, armAngles):
+    def resetTagSettings(self):
+        "Reset tag settings: tag size is 30 mm and no configuration file is used"
+        
+        self.s.ChilitagsModule.resetTagSettings()
+    
+    @qi.bind(returnType=qi.Void, paramsType=[qi.Float])
+    def setDefaultTagSize(self, tagSize):
+        "Set the default tag size (in mm) for Chilitags. Default is 30 mm. Call this method (if you need to) before calling estimate functions."
+        
+        self.s.ChilitagsModule.setDefaultTagSize(tagSize)
+        
+    @qi.bind(returnType=qi.Void, paramsType=[qi.Int16])
+    def setLocalizationTag(self, localizationTag):
+        "Set the localization tag number. Default is 8"
+        
+        self.localizationTag = localizationTag
+        
+    @qi.bind(returnType=qi.Void, paramsType=[qi.String])
+    def readTagConfiguration(self, configFile):
+        "Read the configuration of Chilitags from a YAML file. See 'tag_configuration_sample.yml' for an example."
+        
+        self.s.ChilitagsModule.readTagConfiguration(configFile)
+
+    @qi.bind(returnType=qi.Void, paramsType=[qi.Float, qi.Float, qi.Float, qi.Float])
+    def setTabletResolutionSize(self, resX, resY, tabletWidth, tabletLength):
+        "Set the tablet resolution: number of pixels in X (width), number of pixels in Y (length), tablet width (in metre), tablet length (in metre)."
+        
+        self.tabletResolutionX = resX;
+        self.tabletResolutionY = resY;
+        self.tabletWidth = tabletWidth;
+        self.tabletLength = tabletLength;
+        
+    @qi.bind(returnType=qi.Void, paramsType=[])
+    def unsubscribeCamera(self):
+        "Unsubscribes the camera (necessary before subscribing again)"
+        
+        self.s.ChilitagsModule.unsubscribeCamera()
+        
+    @qi.bind(returnType=qi.Void, paramsType=(qi.Float, qi.Float, qi.Int16))
+    def detectChilitags(self, tabletX, tabletY, tagNumber):
+        
+        givenTag = self.s.ChilitagsModule.estimatePosGivenTag(str(tagNumber)) # estimate the position of a given tag
+        givenTag[0].pop(0) #remove tag name
+        givenTagNp = np.array(givenTag)
+    
+        self.transformChilitagsOptical= np.reshape(givenTagNp, (-1, 4))
+        
+        # transformation matrix from optical to camera (from URDF file of NAO)
+        self.transformOpticalCamera = np.array([[0,0,1,0],[-1,0,0,0],[0,-1,0,0],[0,0,0,1]])
+
+        self.transformChilitagsCamera = np.dot(self.transformOpticalCamera,self.transformChilitagsOptical)
+                  
+        self.transformTabletChilitags = np.array([[1, 0, 0, -1*tabletX], [0, 1, 0, -1*tabletY], [0, 0, 1, 0], [0, 0, 0, 1]])
+          
+        self.transformTabletCamera = np.dot(self.transformChilitagsCamera, self.transformTabletChilitags)
+        
+    @qi.bind(returnType=qi.Void, paramsType=(qi.Float, qi.Float))
+    def transformPixelToRobotCoor(self, tabletX, tabletY, targetFrame):
+        
+        useSensorValues  = True
+        result = np.asarray(self.s.ALMotion.getTransform(self.cameraName, targetFrame, useSensorValues))
+        self.transformCameraRobot = np.reshape(result, (-1, 4)) # 1D numpy array to 2D numpy array
+            
+        self.transformTabletRobot = np.dot(self.transformCameraRobot, self.transformTabletCamera)
+        
+        self.tabletPosX = self.transformTabletRobot[0][3]
+        self.tabletPosY = self.transformTabletRobot[1][3]
+        self.tabletPosZ = self.transformTabletRobot[2][3]
+        
+        coor = np.dot(self.transformTabletRobot, np.array([tabletX, tabletY,0,1]))
+
+        self.coorX= float(coor[0])
+        self.coorY = float(coor[1])
+        self.coorZ = float(coor[2])
+        
+    @qi.bind(returnType=qi.Void, paramsType=[])
+    def pointAtArm(self, armAngles):
         
         self.armAngles = armAngles
         self.timeNumLoop = int(round(self.sleepTime/ self.timeIncrement))
@@ -182,10 +276,9 @@ class PointingService(object):
 #         print "coorY: %.2f\n" % self.coorY
         
         self.s.ALMotion.setAngles(self.hand, 0.01, self.initArmSpeed)
-        self.s.ALMotion.setAngles(self.effector, self.armAngles, self.initArmSpeed)
-        
+        self.s.ALMotion.setAngles(self.effector, self.armAngles, self.initArmSpeed)    
     @qi.bind(returnType=qi.Void, paramsType=[])
-    def LookAtHead(self, headAngles):
+    def lookAtHead(self, headAngles):
         
         self.headAngles = headAngles
         self.timeNumLoop = int(round((self.sleepTime)/ self.timeIncrement))
@@ -198,17 +291,28 @@ class PointingService(object):
 
         self.s.ALMotion.setAngles("Head", self.headAngles, self.initHeadSpeed)
         
-    @qi.bind(returnType=qi.Void, paramsType=(qi.Float, qi.Float, qi.Float, qi.Float, qi.Float))
+    @qi.bind(returnType=qi.Void, paramsType=(qi.Float, qi.Float, qi.Float, qi.Float, qi.Float, qi.Int16))
     @stk.logging.log_exceptions       
-    def PointAtWorld(self, speed, coorX, coorY, coorZ, sleepTime):
+    def pointAtWorld(self, coorX, coorY, coorZ, speed, sleepTime, frame):
         "Point at specified target in 3D"
          
         self.speed = speed     # Fraction of maximum speed
-        self.coorX = coorX     # X coordinate of target wrt to FRAME_WORLD of robot
-        self.coorY = coorY     # Y coordinate of target wrt to FRAME_WORLD of robot
-        self.coorZ = coorZ     # Z coordinate of target wrt to FRAME_WORLD of robot
-        self.sleepTime = 2*sleepTime/3      
-
+        self.sleepTime = 2*sleepTime/3 
+        if frame == 3:         # frame 3 is "FRAME_TABLET"
+            if self.isLocalized == False:
+                print "Localization by a Chilitag on the tablet is necessary. Run localizeUsingChilitagOnTablet method first."
+            else:
+                coor = np.dot(self.transformTabletRobot, np.array([coorX, coorY, 0, 1]))
+                self.coorX= float(coor[0])
+                self.coorY = float(coor[1])
+                self.coorZ = float(coor[2])
+                self.frame = self.fixedFrame
+        else:
+            self.coorX = coorX     # X coordinate of target wrt to frame of robot
+            self.coorY = coorY     # Y coordinate of target wrt to frame of robot
+            self.coorZ = coorZ     # Z coordinate of target wrt to frame of robot     
+            self.frame = frame     # 0 is "FRAME_TORSO", 1 is "FRAME_WORLD", 2 is "FRAME_ROBOT"
+            
         if self.coorY > 0.0:
             self.effector = "RArm"
             self.hand = "RHand"            
@@ -217,15 +321,16 @@ class PointingService(object):
             self.hand = "LHand"
         #else use whichever arm is used last time
     
-        self.StopAwareness()
+#         self.stopAwareness()
+
         self.useSensors = False
         self.headAngles = self.s.ALMotion.getAngles("Head", self.useSensors)
         self.armAngles = self.s.ALMotion.getAngles(self.effector, self.useSensors)
         
         self.s.ALMotion.setAngles(self.hand, 1.0, self.initArmSpeed)
     
-        headThread = Thread(target=self.LookAtHead, args=(self.headAngles, ))
-        armThread = Thread(target=self.PointAtArm, args=(self.armAngles, ))
+        headThread = Thread(target=self.lookAtHead, args=(self.headAngles, ))
+        armThread = Thread(target=self.pointAtArm, args=(self.armAngles, ))
 
         headThread.start()
         time.sleep(0.5)
@@ -235,48 +340,53 @@ class PointingService(object):
         armThread.join()
         time.sleep(2.0)    # Change this to the time necessary for both actions to be finished
 
-        self.StartAwareness() 
-                
+#         self.startAwareness() 
+                   
     @qi.bind(returnType=qi.Void, paramsType=(qi.Float, qi.Float, qi.Float, qi.Float))
     @stk.logging.log_exceptions
-    def PointAtTablet(self, speed, tabletPixelX, tabletPixelY, sleepTime):
+    def pointAtTablet(self, tabletPixelX, tabletPixelY, speed, sleepTime):
         "Point at specified tablet Pixel X and Pixel Y"
          
         self.speed = speed     # Fraction of maximum speed
-        self.tabletPixelX = tabletPixelX/self.tabletResolutionX   # Tablet pixel in X direction (width) wrt top-left corner of tablet (horizontal)
-        self.tabletPixelY = tabletPixelY/self.tabletResolutionY    # Tablet pixel in Y direction (length) wrt top-left corner of tablet (vertical)
+        self.tabletX = (tabletPixelX/self.tabletResolutionX)*self.tabletWidth   # Tablet pixel in X direction (width) wrt top-left corner of tablet (horizontal)
+        self.tabletY = (tabletPixelY/self.tabletResolutionY)*self.tabletLength    # Tablet pixel in Y direction (length) wrt top-left corner of tablet (vertical)
         self.sleepTime = sleepTime
+        
+        if self.isLocalized == False:
+            self.localizeUsingChilitagOnTablet(tabletPixelX, tabletPixelY)
+        else:
+            coor = np.dot(self.transformTabletRobot, np.array([self.tabletX, self.tabletY, 0, 1]))
+            self.coorX= float(coor[0])
+            self.coorY = float(coor[1])
+            self.coorZ = float(coor[2])
 
-        self.gamma = math.radians(180) # robot is vertical (is facing) to the tablet (rotation angle about Xtablet)
-         
-        # The following are for self.robotPosition == "Top":   
-        self.theta =  math.radians(90) # rotation angle about Ztablet
-        self.xTrans = self.tabletWidth/2 - self.tabletY # xTranslation from Xtablet to origin of robot FRAME_WORLD for self.robotPosition == "Top"
-        self.yTrans = self.tabletX - self.tabletLength/2 # yTranslation from Ytablet to origin of robot FRAME_WORLD for self.robotPosition == "Top"
-         
-        if self.robotPosition == "Bottom":
-            self.theta = math.radians(-90)
-            self.yTrans = self.tabletX + self.tabletLength/2
-        elif self.robotPosition == "Right":
-            self.theta = math.radians(180)
-            self.xTrans = self.tabletX - self.tabletWidth/2
-            self.yTrans = self.tabletLength/2 - self.tabletY
-        elif self.robotPosition == "Left":
-            self.theta = math.radians(0)
-            self.xTrans = self.tabletX + self.tabletWidth/2
-            self.yTrans = self.tabletLength/2 - self.tabletY
-             
-        self.coorX = math.cos(self.theta)*self.tabletPixelX - math.cos(self.gamma)*math.sin(self.theta)*self.tabletPixelY + \
-                    math.sin(self.gamma)*math.sin(self.theta) + self.xTrans*math.cos(self.theta) - self.yTrans*math.cos(self.gamma)*math.sin(self.theta)
-        self.coorY = math.sin(self.theta)*self.tabletPixelX + math.cos(self.gamma)*math.cos(self.theta)*self.tabletPixelY + \
-                    self.xTrans*math.sin(self.theta) - math.cos(self.theta)*math.sin(self.gamma) + self.yTrans*math.cos(self.gamma)*math.cos(self.theta)
-        self.coorZ = self.tabletZ
+        self.pointAtWorld(self.coorX, self.coorY, self.coorZ, self.speed, self.sleepTime, self.fixedFrame)
 
-        print "coorX: %.2f\n" % self.coorX
-        print "coorY: %.2f\n" % self.coorY
-        print "coorZ: %.2f\n" % self.coorZ
-         
-        self.PointAtWorld(self.speed, self.coorX, self.coorY, self.coorZ, self.sleepTime)
+    @qi.bind(returnType=qi.Void, paramsType=(qi.Float, qi.Float, qi.Int16))
+    @stk.logging.log_exceptions
+    def localizeUsingChilitagOnTablet(self, tabletPixelX, tabletPixelY):
+        "Point at specified tablet Pixel X and Pixel Y"
+        
+        self.isLocalized = False
+        
+        self.tabletX = (tabletPixelX/self.tabletResolutionX)*self.tabletWidth   # Tablet pixel in X direction (width) wrt top-left corner of tablet (horizontal)
+        self.tabletY = (tabletPixelY/self.tabletResolutionY)*self.tabletLength    # Tablet pixel in Y direction (length) wrt top-left corner of tablet (vertical)
+        
+        self.detectChilitags(self.tabletX, self.tabletY, self.localizationTag)
+        self.transformPixelToRobotCoor(self.tabletX, self.tabletY, self.fixedFrame)
+        
+        self.isLocalized = True
+        
+    @qi.bind(returnType=qi.Void, paramsType=[qi.Int16])
+    @stk.logging.log_exceptions
+    def pointAtTag(self, tagName, speed, sleepTime):
+        "Point at tag"
+        self.speed = speed     # Fraction of maximum speed 
+        self.sleepTime = sleepTime
+        self.detectChilitags(0, 0, tagName)
+        self.transformPixelToRobotCoor(0, 0, self.fixedFrame)
+
+        self.pointAtWorld(self.coorX, self.coorY, self.coorZ, self.speed, self.sleepTime, self.fixedFrame)
         
 ####################
 # Setup and Run

@@ -54,34 +54,49 @@ var application = function(){
                 console.log("Button " + level + " clicked");
 				if(level==1)
 				{
-					//execute directly
-					//autostate="solitary";
-					//startRobot(autostate);
-					PointingService.StartLife().then(function(){
+					PointingService.stiffnessOn().then(function(){
 	                    button.addClass("highlighted");
 						});
 				}
 				if(level==2)
-				{//execute directly
-					//autostate="disabled";
-					//startRobot(autostate);
-					PointingService.StopLife().then(function(){
+				{
+					PointingService.stiffnessOff().then(function(){
 	                    button.addClass("highlighted");
 						});
 				}
 				if(level==3)
-				{//execute directly
-					//var vSpeech = prompt("Say something via NAO", "Hello");
-					//speak(vSpeech);
-					PointingService.PointAtWorld(0.2,1.0,-1.0,1.0,5.0).then(function(){
-					//PointingService.PointAtWorld(0.2,1.0,1.0,0.0).then(function(){
+				{
+					PointingService.subscribeCamera(1).then(function(){
 	                    button.addClass("highlighted");
 						});
 				}
 				if(level==4)
-				{//use the service to execute a behaviour
-					PointingService.PointAtTablet(0.2,100,200,10.0).then(function(){
-//					PointingService.PointAtTablet(0.2,100,200).then(function(){
+				{
+					PointingService.unsubscribeCamera().then(function(){
+	                    button.addClass("highlighted");
+						});
+				}
+				if(level==5)
+				{
+					PointingService.pointAtWorld(0.1, 0.1, 0.1, 0.3, 2.5, 0).then(function(){
+	                    button.addClass("highlighted");
+						});
+				}
+				if(level==6)
+				{
+					PointingService.localise(1368, 912).then(function(){
+	                    button.addClass("highlighted");
+						});
+				}
+				if(level==7)
+				{
+					PointingService.pointAtTablet(100, 100, 0.3, 2.5).then(function(){
+	                    button.addClass("highlighted");
+						});
+				}
+				if(level==8)
+				{
+					PointingService.pointAtTag(8, 0.3, 2.5).then(function(){
 	                    button.addClass("highlighted");
 						});
 				}
@@ -105,30 +120,6 @@ var application = function(){
 		// make sure the event isn't bubbling
 		if (e.target != this) {
 			return;
-		}
-		pointing(e.pageX, e.pageY);
-		});
-		//function for speech
-		function speak(ttstemp)
-		{
-			session.service("ALTextToSpeech").done(function(tts)
-			{
-				tts.say(ttstemp);
-			});
-		}
-		//function for pointing
-		function pointing(vX, vY)
-		{
-			console.log("X:" + vX + "Y:" + vY);
-			$(".labelclass1").text("X: " + vX + " Y: " + vY);
-		}
-		//function for setting autonomous life
-		function startRobot(autostate)
-		{
-			session.service("ALAutonomousLife").done(function(motionAuto)
-			{
-				motionAuto.setState(autostate);
-			});
 		}
 					
         checkConnectionGauge();
