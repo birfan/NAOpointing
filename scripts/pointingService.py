@@ -300,7 +300,7 @@ class PointingService(object):
         self.sleepTime = 2*sleepTime/3 
         if frame == 3:         # frame 3 is "FRAME_TABLET"
             if self.isLocalized == False:
-                print "Localization by a Chilitag on the tablet is necessary. Run localizeUsingChilitagOnTablet method first."
+                print "Localisation by a Chilitag on the tablet is necessary. Run localise method first."
             else:
                 coor = np.dot(self.transformTabletRobot, np.array([coorX, coorY, 0, 1]))
                 self.coorX= float(coor[0])
@@ -353,7 +353,7 @@ class PointingService(object):
         self.sleepTime = sleepTime
         
         if self.isLocalized == False:
-            self.localizeUsingChilitagOnTablet(tabletPixelX, tabletPixelY)
+            self.localise(tabletPixelX, tabletPixelY)
         else:
             coor = np.dot(self.transformTabletRobot, np.array([self.tabletX, self.tabletY, 0, 1]))
             self.coorX= float(coor[0])
@@ -362,9 +362,9 @@ class PointingService(object):
 
         self.pointAtWorld(self.coorX, self.coorY, self.coorZ, self.speed, self.sleepTime, self.fixedFrame)
 
-    @qi.bind(returnType=qi.Void, paramsType=(qi.Float, qi.Float, qi.Int16))
+    @qi.bind(returnType=qi.Void, paramsType=(qi.Float, qi.Float))
     @stk.logging.log_exceptions
-    def localizeUsingChilitagOnTablet(self, tabletPixelX, tabletPixelY):
+    def localise(self, tabletPixelX, tabletPixelY):
         "Point at specified tablet Pixel X and Pixel Y"
         
         self.isLocalized = False
@@ -377,7 +377,7 @@ class PointingService(object):
         
         self.isLocalized = True
         
-    @qi.bind(returnType=qi.Void, paramsType=[qi.Int16])
+    @qi.bind(returnType=qi.Void, paramsType=(qi.Int16, qi.Float, qi.Float))
     @stk.logging.log_exceptions
     def pointAtTag(self, tagName, speed, sleepTime):
         "Point at tag"
