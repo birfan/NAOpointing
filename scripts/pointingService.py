@@ -1,10 +1,22 @@
 #!/usr/local/bin/python
 """
 /*******************************************************************************
-*   Copyright 2016 Bahar Irfan                                                 *
+*   Copyright (c) 2016-present, Bahar Irfan. All rights reserved.              *
 *                                                                              *
-*   This file is the pointing service for Nao for pointing at Chilitags or     *
-*   a world coordinate.                                                        *
+*   This file is the pointing service for NAO robot to point at Chilitags or a *
+*   world or tablet coordinate.                                                *
+*                                                                              *
+*   Please cite the following work if using this work:                         *
+*                                                                              *
+*     Robust Pointing with NAO Robot. B. Irfan. University of Plymouth, UK.    *
+*     https://github.com/birfan/NAOpointing. 2016.                             *
+*                                                                              *
+*     Chilitags for NAO Robot. B. Irfan and S. Lemaignan. University of        *
+*     Plymouth, UK. https://github.com/birfan/chilitags. 2016.                 *
+*                                                                              *
+*     Chilitags 2: Robust Fiducial Markers for Augmented Reality. Q. Bonnard,  *
+*     S. Lemaignan, G.  Zufferey, A. Mazzei, S. Cuendet, N. Li, P. Dillenbourg.*
+*     CHILI, EPFL, Switzerland. http://chili.epfl.ch/software. 2013.           *
 *                                                                              *
 *   Chilitags is free software: you can redistribute it and/or modify          *
 *   it under the terms of the Lesser GNU General Public License as             *
@@ -16,14 +28,16 @@
 *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the              *
 *   GNU Lesser General Public License for more details.                        *
 *                                                                              *
-*   You should have received a copy of the GNU Lesser General Public License   *
-*   along with PointingService.  If not, see <http://www.gnu.org/licenses/>.   *
+*   PointingService is released under GNU Lesser General Public License v3.0   *
+*   (LGPL3) in accordance with Chilitags (Bonnard et al., 2013). You should    *
+*   have received a copy of the GNU Lesser General Public License along with   *
+*   Chilitags.  If not, see <http://www.gnu.org/licenses/>.                    *
 *******************************************************************************/
 """
 
-__version__ = "0.0.1"
+__version__ = '0.0.1'
 
-__copyright__ = "Copyright 2016, Bahar Irfan"
+__copyright__ = 'Copyright (c) 2016-present, Bahar Irfan. All rights reserved.'
 __author__ = 'Bahar Irfan'
 __email__ = 'bahar.irfan@plymouth.ac.uk'
 
@@ -218,7 +232,8 @@ class PointingService(object):
         
     @qi.bind(returnType=qi.Void, paramsType=(qi.Float, qi.Float, qi.Int16))
     def detectChilitags(self, tabletX, tabletY, tagNumber):
-        
+        "Detect chilitags, and create transformations"
+
         givenTag = self.s.ChilitagsModule.estimatePosGivenTag(str(tagNumber)) # estimate the position of a given tag
         givenTag[0].pop(0) #remove tag name
         givenTagNp = np.array(givenTag)
@@ -236,7 +251,8 @@ class PointingService(object):
         
     @qi.bind(returnType=qi.Void, paramsType=(qi.Float, qi.Float))
     def transformPixelToRobotCoor(self, tabletX, tabletY, targetFrame):
-        
+        "Transform tablet pixel to robot coordinates"
+
         useSensorValues  = True
         result = np.asarray(self.s.ALMotion.getTransform(self.cameraName, targetFrame, useSensorValues))
         self.transformCameraRobot = np.reshape(result, (-1, 4)) # 1D numpy array to 2D numpy array
@@ -255,6 +271,7 @@ class PointingService(object):
         
     @qi.bind(returnType=qi.Void, paramsType=[])
     def pointAtArm(self, armAngles):
+        "Point at a coordinate with robot (position robot arm towards that direction)"
         
         self.armAngles = armAngles
         self.timeNumLoop = int(round(self.sleepTime/ self.timeIncrement))
@@ -279,7 +296,8 @@ class PointingService(object):
         self.s.ALMotion.setAngles(self.effector, self.armAngles, self.initArmSpeed)    
     @qi.bind(returnType=qi.Void, paramsType=[])
     def lookAtHead(self, headAngles):
-        
+        "Look at a coordinate with robot (turn head towards that direction)"
+
         self.headAngles = headAngles
         self.timeNumLoop = int(round((self.sleepTime)/ self.timeIncrement))
         
@@ -294,13 +312,13 @@ class PointingService(object):
     @qi.bind(returnType=qi.Void, paramsType=(qi.Float, qi.Float, qi.Float, qi.Float, qi.Float, qi.Int16))
     @stk.logging.log_exceptions       
     def pointAtWorld(self, coorX, coorY, coorZ, speed, sleepTime, frame):
-        "Point at specified target in 3D"
+        "Point at specified target in 3D with a given arm speed, duration of pointing, and frame for robot"
          
         self.speed = speed     # Fraction of maximum speed
         self.sleepTime = 2*sleepTime/3 
         if frame == 3:         # frame 3 is "FRAME_TABLET"
             if self.isLocalized == False:
-                print "Localisation by a Chilitag on the tablet is necessary. Run localise method first."
+                print "Localization by a Chilitag on the tablet is necessary. Run localize method first."
             else:
                 coor = np.dot(self.transformTabletRobot, np.array([coorX, coorY, 0, 1]))
                 self.coorX= float(coor[0])
@@ -345,7 +363,7 @@ class PointingService(object):
     @qi.bind(returnType=qi.Void, paramsType=(qi.Float, qi.Float, qi.Float, qi.Float))
     @stk.logging.log_exceptions
     def pointAtTablet(self, tabletPixelX, tabletPixelY, speed, sleepTime):
-        "Point at specified tablet Pixel X and Pixel Y"
+        "Point at specified tablet Pixel X and Pixel Y with a given arm speed and duration of pointing"
          
         self.speed = speed     # Fraction of maximum speed
         self.tabletX = (tabletPixelX/self.tabletResolutionX)*self.tabletWidth   # Tablet pixel in X direction (width) wrt top-left corner of tablet (horizontal)
@@ -353,7 +371,7 @@ class PointingService(object):
         self.sleepTime = sleepTime
         
         if self.isLocalized == False:
-            self.localise(tabletPixelX, tabletPixelY)
+            self.localize(tabletPixelX, tabletPixelY)
         else:
             coor = np.dot(self.transformTabletRobot, np.array([self.tabletX, self.tabletY, 0, 1]))
             self.coorX= float(coor[0])
@@ -364,8 +382,8 @@ class PointingService(object):
 
     @qi.bind(returnType=qi.Void, paramsType=(qi.Float, qi.Float))
     @stk.logging.log_exceptions
-    def localise(self, tabletPixelX, tabletPixelY):
-        "Point at specified tablet Pixel X and Pixel Y"
+    def localize(self, tabletPixelX, tabletPixelY):
+        "Localize wrt tablet coordinates and chilitags"
         
         self.isLocalized = False
         
@@ -380,7 +398,7 @@ class PointingService(object):
     @qi.bind(returnType=qi.Void, paramsType=(qi.Int16, qi.Float, qi.Float))
     @stk.logging.log_exceptions
     def pointAtTag(self, tagName, speed, sleepTime):
-        "Point at tag"
+        "Point at specified tag with a given arm speed and duration of pointing"
         self.speed = speed     # Fraction of maximum speed 
         self.sleepTime = sleepTime
         self.detectChilitags(0, 0, tagName)
