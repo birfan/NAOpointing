@@ -1,5 +1,4 @@
 # Robust Pointing with NAO Robot
-=====================================================
 
 This project provides a pointing service for NAO robot (SoftBank Robotics Europe, France) to point (and look) at objects with Chilitags (in physical world or on tablet) or to a world or tablet coordinate. The robot uses its closest hand, i.e., choosing left if the object is to the left of the robot and right, if otherwise. Chilitags are 2D fiducial markers to detect objects and determine their positions. The pointing service was tested with NAOqi 2.1 and 2.4 on a NAO robot. While Pepper robot (SoftBank Robotics Europe, France) also has a NAOqi operating system, this project was not tested on it.
  
@@ -12,7 +11,7 @@ This project contains multiple files that need to be uploaded to your NAO robot 
 The *pointing-webpage.pml* is the main project file that you open through Choregraphe. This contains all of the required files, but the Choregraphe window will stay grey. You can see the files in the 'Project content' tab. To install on the robot, upload the files to your local NAO robot using the 'Package and install current project to the robot' option in the 'Robot Applications' tab. You do not need to run it - it will automatically start, although you may need to restart NAOqi if it does not work straight away. After installing, you can use this library as a default NAOqi library with the functions described below.
 
 You can access the demo webpage by typing the following address into your browser:
-http://ROBOT_IP/apps/pointing-webpage/  (change the IP address that corresponds to your NAO)
+`http://ROBOT_IP/apps/pointing-webpage/`  (change the IP address that corresponds to your NAO)
 
 The robot needs to be 'awake' (not sleeping) before you can execute pointing commands.
 
